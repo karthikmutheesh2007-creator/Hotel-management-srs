@@ -1,0 +1,300 @@
+import java.util.*;
+
+// ---------- Abstract Room ----------
+abstract class Room {
+    private final int roomNumber;
+    private final boolean ac;
+    private boolean available = true;
+    protected final double baseCost;
+    protected final double acExtra;
+
+    Room(int roomNumber, boolean ac, double baseCost, double acExtra) {
+        this.roomNumber = roomNumber;
+        this.ac = ac;
+        this.baseCost = baseCost;
+        this.acExtra = acExtra;
+    }
+
+    public int getRoomNumber() { return roomNumber; }
+    public boolean isAc() { return ac; }
+    public boolean isAvailable() { return available; }
+    public void setAvailable(boolean available) { this.available = available; }
+
+    // Per night cost = base cost + AC extra (if AC room)
+    public double getCostPerNight() { return baseCost + (ac ? acExtra : 0); }
+
+    public abstract String getType();
+    public abstract int getCapacity();
+}
+
+class SingleRoom extends Room {
+    SingleRoom(int no, boolean ac) { super(no, ac, 1000, 500); }
+    public String getType() { return "Single"; }
+    public int getCapacity() { return 1; }
+}
+
+class FamilyRoom extends Room {
+    FamilyRoom(int no, boolean ac) { super(no, ac, 2000, 800); }
+    public String getType() { return "Family"; }
+    public int getCapacity() { return 4; }
+}
+
+// ---------- Customer ----------
+class Customer {
+    private final String name;
+    private final int age;
+    private final String phone;
+    private final String idType;     // AADHAAR / PASSPORT / VOTER
+    private final String idNumber;
+
+    Customer(String name, int age, String phone, String idType, String idNumber) {
+        this.name = name;
+        this.age = age;
+        this.phone = phone;
+        this.idType = idType;
+        this.idNumber = idNumber.toUpperCase();
+    }
+
+    public String getName() { return name; }
+    public int getAge() { return age; }
+    public String getPhone() { return phone; }
+    public String getIdType() { return idType; }
+    public String getIdNumber() { return idNumber; }
+}
+
+// ---------- Customer Verification ----------
+class CustomerVerifier {
+    // Returns a list of problems. Empty list = customer verified.
+    public static List<String> verify(Customer c) {
+        List<String> errors = new ArrayList<>();
+
+        if (!c.getName().matches("[A-Za-z ]{2,}"))
+            errors.add("Name must have only letters (min 2 characters).");
+
+        if (c.getAge() < 18)
+            errors.add("Customer must be 18 or older.");
+
+        if (!c.getPhone().matches("[6-9]\\d{9}"))
+            errors.add("Phone must be 10 digits and start with 6-9.");
+
+        switch (c.getIdType()) {
+            case "AADHAAR" -> {
+                if (!c.getIdNumber().matches("\\d{12}"))
+                    errors.add("Aadhaar must be exactly 12 digits.");
+            }
+            case "PASSPORT" -> {
+                if (!c.getIdNumber().matches("[A-Z]\\d{7}"))
+                    errors.add("Passport must be 1 letter followed by 7 digits.");
+            }
+            case "VOTER" -> {
+                if (!c.getIdNumber().matches("[A-Z]{3}\\d{7}"))
+                    errors.add("Voter ID must be 3 letters followed by 7 digits.");
+            }
+            default -> errors.add("Unknown ID type.");
+        }
+        return errors;
+    }
+}
+
+// ---------- Booking ----------
+class Booking {
+    enum Status { ACTIVE, CHECKED_OUT }
+
+    private static int counter = 1000;
+    private final int bookingId;
+    private final Customer customer;
+    private final Room room;
+    private final int nights;
+    private Status status = Status.ACTIVE;
+
+    Booking(Customer customer, Room room, int nights) {
+        this.bookingId = ++counter;
+        this.customer = customer;
+        this.room = room;
+        this.nights = nights;
+    }
+
+    public int getBookingId() { return bookingId; }
+    public Customer getCustomer() { return customer; }
+    public Room getRoom() { return room; }
+    public Status getStatus() { return status; }
+    public void setStatus(Status s) { this.status = s; }
+    public double getTotal() { return room.getCostPerNight() * nights; }
+
+    @Override
+    public String toString() {
+        return String.format("#%d | %s | Room %d (%s, %s) | %d night(s) | Rs.%.0f | %s",
+                bookingId, customer.getName(), room.getRoomNumber(), room.getType(),
+                room.isAc() ? "AC" : "Non-AC", nights, getTotal(), status);
+    }
+}
+
+// ---------- Hotel ----------
+class Hotel {
+    private final String name;
+    private final List<Room> rooms = new ArrayList<>();
+    private final Map<Integer, Booking> bookings = new LinkedHashMap<>();
+
+    Hotel(String name) {
+        this.name = name;
+        rooms.add(new SingleRoom(101, false));
+        rooms.add(new SingleRoom(102, false));
+        rooms.add(new SingleRoom(103, true));
+        rooms.add(new SingleRoom(104, true));
+        rooms.add(new FamilyRoom(201, false));
+        rooms.add(new FamilyRoom(202, true));
+        rooms.add(new FamilyRoom(203, true));
+    }
+
+    public String getName() { return name; }
+
+    // type: "Single"/"Family"/null (any), ac: true/false/null (any)
+    public void showRooms(boolean onlyAvailable, String type, Boolean ac) {
+        System.out.println("\n--- " + name + " ---");
+        System.out.printf("%-6s %-8s %-8s %-9s %-12s %-10s%n",
+                "Room", "Type", "AC", "Capacity", "Cost/Night", "Status");
+        int count = 0;
+        for (Room r : rooms) {
+            if (onlyAvailable && !r.isAvailable()) continue;
+            if (type != null && !r.getType().equals(type)) continue;
+            if (ac != null && r.isAc() != ac) continue;
+            System.out.printf("%-6d %-8s %-8s %-9d Rs.%-9.0f %-10s%n",
+                    r.getRoomNumber(), r.getType(), r.isAc() ? "AC" : "Non-AC",
+                    r.getCapacity(), r.getCostPerNight(),
+                    r.isAvailable() ? "Available" : "Booked");
+            count++;
+        }
+        if (count == 0) System.out.println("No rooms match your search.");
+        else System.out.println("Rooms shown: " + count);
+    }
+
+    private Room findRoom(int no) {
+        for (Room r : rooms) if (r.getRoomNumber() == no) return r;
+        return null;
+    }
+
+    private boolean hasActiveBooking(String idNumber) {
+        for (Booking b : bookings.values())
+            if (b.getStatus() == Booking.Status.ACTIVE
+                    && b.getCustomer().getIdNumber().equals(idNumber)) return true;
+        return false;
+    }
+
+    public void bookRoom(Customer customer, int roomNo, int nights) {
+        // Step 1: verify customer
+        List<String> errors = CustomerVerifier.verify(customer);
+        if (!errors.isEmpty()) {
+            System.out.println("\nVerification FAILED:");
+            errors.forEach(e -> System.out.println(" - " + e));
+            return;
+        }
+        if (hasActiveBooking(customer.getIdNumber())) {
+            System.out.println("Verification FAILED: this ID already has an active booking.");
+            return;
+        }
+        System.out.println("Customer verified successfully.");
+
+        // Step 2: check room
+        Room room = findRoom(roomNo);
+        if (room == null) { System.out.println("Room not found."); return; }
+        if (!room.isAvailable()) { System.out.println("Room is already booked."); return; }
+        if (nights <= 0) { System.out.println("Nights must be at least 1."); return; }
+
+        // Step 3: confirm booking
+        Booking b = new Booking(customer, room, nights);
+        room.setAvailable(false);
+        bookings.put(b.getBookingId(), b);
+        System.out.println("\nBooking confirmed at " + name + "!");
+        System.out.println(b);
+    }
+
+    public void checkOut(int bookingId) {
+        Booking b = bookings.get(bookingId);
+        if (b == null || b.getStatus() != Booking.Status.ACTIVE) {
+            System.out.println("No active booking with that ID.");
+            return;
+        }
+        b.setStatus(Booking.Status.CHECKED_OUT);
+        b.getRoom().setAvailable(true);
+        System.out.printf("Checked out. Final bill: Rs.%.0f%n", b.getTotal());
+    }
+
+    public void showBookings() {
+        if (bookings.isEmpty()) { System.out.println("No bookings yet."); return; }
+        bookings.values().forEach(System.out::println);
+    }
+}
+
+// ---------- Main ----------
+public class HotelManagement {
+    private static final Scanner sc = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        Hotel hotel = new Hotel("Grand Kovai Hotel");
+        System.out.println("===== Welcome to " + hotel.getName() + " =====");
+
+        while (true) {
+            System.out.println("\n1. View all rooms");
+            System.out.println("2. Search available rooms (by type / AC)");
+            System.out.println("3. Book a room");
+            System.out.println("4. Check-out");
+            System.out.println("5. View bookings");
+            System.out.println("0. Exit");
+            System.out.print("Choose: ");
+
+            switch (readInt()) {
+                case 1 -> hotel.showRooms(false, null, null);
+                case 2 -> searchRooms(hotel);
+                case 3 -> handleBooking(hotel);
+                case 4 -> { System.out.print("Booking ID: "); hotel.checkOut(readInt()); }
+                case 5 -> hotel.showBookings();
+                case 0 -> { System.out.println("Thank you, visit again!"); return; }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void searchRooms(Hotel hotel) {
+        System.out.print("Room type (1-Single, 2-Family, 3-Any): ");
+        int t = readInt();
+        String type = t == 1 ? "Single" : t == 2 ? "Family" : null;
+
+        System.out.print("AC? (1-AC, 2-Non-AC, 3-Any): ");
+        int a = readInt();
+        Boolean ac = a == 1 ? Boolean.TRUE : a == 2 ? Boolean.FALSE : null;
+
+        hotel.showRooms(true, type, ac);
+    }
+
+    private static void handleBooking(Hotel hotel) {
+        System.out.print("Customer name: ");
+        String name = sc.nextLine().trim();
+        System.out.print("Age: ");
+        int age = readInt();
+        System.out.print("Phone (10 digits): ");
+        String phone = sc.nextLine().trim();
+
+        System.out.print("ID type (1-Aadhaar, 2-Passport, 3-Voter ID): ");
+        int idChoice = readInt();
+        String idType = idChoice == 1 ? "AADHAAR" : idChoice == 2 ? "PASSPORT"
+                : idChoice == 3 ? "VOTER" : "UNKNOWN";
+        System.out.print("ID number: ");
+        String idNumber = sc.nextLine().trim();
+
+        System.out.print("Room number to book: ");
+        int roomNo = readInt();
+        System.out.print("Number of nights: ");
+        int nights = readInt();
+
+        Customer customer = new Customer(name, age, phone, idType, idNumber);
+        hotel.bookRoom(customer, roomNo, nights);
+    }
+
+    private static int readInt() {
+        try {
+            return Integer.parseInt(sc.nextLine().trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+}
